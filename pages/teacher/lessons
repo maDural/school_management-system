@@ -1,0 +1,745 @@
+<?php
+require_once '../../config/database.php';
+
+if (!isLoggedIn() || !isTeacher()) {
+    redirect('../../index.php');
+}
+
+$teacher_id = $_SESSION['user_id'];
+
+// Get lessons with materials
+$stmt = $pdo->prepare("
+    SELECT l.*, 
+           (SELECT COUNT(*) FROM lesson_materials WHERE lesson_id = l.id) as material_count
+    FROM lessons l 
+    WHERE l.teacher_id = ? 
+    ORDER BY l.lesson_date DESC, l.id DESC
+");
+$stmt->execute([$teacher_id]);
+$lessons = $stmt->fetchAll();
+
+// Get materials for each lesson
+foreach ($lessons as &$lesson) {
+    $stmt = $pdo->prepare("SELECT * FROM lesson_materials WHERE lesson_id = ?");
+    $stmt->execute([$lesson['id']]);
+    $lesson['materials'] = $stmt->fetchAll();
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lessons - Mabaso Secondary School</title>
+    <link rel="stylesheet" href="../../css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        
+        body {
+            background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1280px;
+            padding: 20px 30px;
+        }
+        
+        .content {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-radius: 28px;
+            padding: 35px;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+        }
+        
+        .header-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .header-section h2 {
+            font-size: 28px;
+            font-weight: 800;
+            color: #0f172a;
+        }
+        
+        .btn-premium {
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #ffffff;
+        }
+        
+        .btn-premium:hover {
+            transform: translateY(-2px) scale(1.02);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #0d9488, #059669);
+            box-shadow: 0 8px 25px rgba(13, 148, 136, 0.25);
+        }
+        
+        .alert {
+            padding: 14px 20px;
+            margin: 15px 0;
+            border-radius: 12px;
+            font-weight: 500;
+            border-left: 4px solid;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left-color: #0d9488;
+        }
+        
+        .lesson-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 24px;
+            transition: all 0.3s ease;
+            margin-bottom: 15px;
+        }
+        
+        .lesson-card:hover {
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+            transform: translateX(5px);
+            border-color: #0d9488;
+        }
+        
+        .lesson-card .lesson-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .lesson-card h3 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+        }
+        
+        .lesson-card .class-tag {
+            display: inline-block;
+            background: #f1f5f9;
+            padding: 2px 12px;
+            border-radius: 100px;
+            font-size: 12px;
+            color: #475569;
+        }
+        
+        .lesson-card .class-tag.all-classes {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .lesson-card .meta {
+            color: #64748b;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        
+        .lesson-card .meta strong {
+            color: #0f172a;
+        }
+        
+        .lesson-card p {
+            color: #475569;
+            margin-top: 10px;
+            line-height: 1.8;
+        }
+        
+        .lesson-card .timestamp {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+        
+        /* Materials Section */
+        .lesson-card .materials-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #f1f5f9;
+        }
+        
+        .lesson-card .materials-section .materials-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .lesson-card .material-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #0f172a;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        
+        .lesson-card .material-item:hover {
+            background: #f0fdf4;
+            border-color: #0d9488;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(13, 148, 136, 0.15);
+        }
+        
+        .lesson-card .material-item .material-icon {
+            font-size: 18px;
+        }
+        
+        .lesson-card .material-item .material-name {
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .lesson-card .material-item .material-size {
+            font-size: 11px;
+            color: #94a3b8;
+        }
+        
+        .lesson-card .material-item .view-btn {
+            background: #0d9488;
+            color: white;
+            border: none;
+            padding: 2px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .lesson-card .material-item .view-btn:hover {
+            background: #059669;
+        }
+        
+        .lesson-card .no-materials {
+            font-size: 13px;
+            color: #94a3b8;
+            font-style: italic;
+        }
+        
+        .alert-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border-left-color: #f59e0b;
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .modal-overlay.active {
+            display: flex;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            max-width: 900px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.3s ease;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            border-bottom: 1px solid #f1f5f9;
+            background: #f8fafc;
+        }
+        
+        .modal-header h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+        }
+        
+        .modal-header .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #94a3b8;
+            transition: all 0.3s ease;
+            padding: 0 8px;
+        }
+        
+        .modal-header .modal-close:hover {
+            color: #ef4444;
+            transform: rotate(90deg);
+        }
+        
+        .modal-body {
+            padding: 25px;
+            overflow-y: auto;
+            max-height: 70vh;
+        }
+        
+        .modal-body .file-info {
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .modal-body .file-info .file-icon-big {
+            font-size: 48px;
+        }
+        
+        .modal-body .file-info .file-details {
+            flex: 1;
+        }
+        
+        .modal-body .file-info .file-details .file-name-big {
+            font-weight: 600;
+            color: #0f172a;
+            font-size: 16px;
+        }
+        
+        .modal-body .file-info .file-details .file-meta {
+            color: #94a3b8;
+            font-size: 13px;
+        }
+        
+        .modal-body .file-preview-container {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .modal-body .file-preview-container img {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+        }
+        
+        .modal-body .file-preview-container .pdf-preview {
+            width: 100%;
+            height: 500px;
+            border: none;
+            border-radius: 8px;
+        }
+        
+        .modal-body .file-preview-container .file-placeholder {
+            text-align: center;
+            color: #94a3b8;
+        }
+        
+        .modal-body .file-preview-container .file-placeholder .big-icon {
+            font-size: 80px;
+            display: block;
+            margin-bottom: 15px;
+        }
+        
+        .modal-footer {
+            padding: 15px 25px;
+            border-top: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            background: #f8fafc;
+        }
+        
+        .modal-footer .btn-download {
+            padding: 10px 24px;
+            background: linear-gradient(135deg, #0d9488, #059669);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .modal-footer .btn-download:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(13, 148, 136, 0.3);
+        }
+        
+        .modal-footer .btn-close-modal {
+            padding: 10px 24px;
+            background: #f1f5f9;
+            color: #475569;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .modal-footer .btn-close-modal:hover {
+            background: #e2e8f0;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px 15px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .header-section {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .header-section h2 {
+                font-size: 22px;
+            }
+            
+            .lesson-card .material-item {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .lesson-card .lesson-header {
+                flex-direction: column;
+            }
+            
+            .modal-content {
+                max-height: 95vh;
+            }
+            
+            .modal-body {
+                padding: 15px;
+            }
+            
+            .modal-body .file-preview-container .pdf-preview {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <?php include '../../includes/header.php'; ?>
+    
+    <div class="container">
+        <div class="content">
+            <div class="header-section">
+                <h2>📚 My Lessons</h2>
+                <a href="add_lesson.php" class="btn-premium btn-success">➕ Add New Lesson</a>
+            </div>
+            
+            <?php if (isset($_GET['success'])): ?>
+                <div class="alert alert-success">
+                    ✅ <?php echo isset($_GET['message']) ? htmlspecialchars($_GET['message']) : 'Lesson added successfully!'; ?>
+                </div>
+            <?php endif; ?>
+            
+            <?php if (count($lessons) > 0): ?>
+                <div style="margin-top: 20px;">
+                    <?php foreach($lessons as $lesson): ?>
+                    <div class="lesson-card">
+                        <div class="lesson-header">
+                            <h3><?php echo htmlspecialchars($lesson['title']); ?></h3>
+                            <?php if (!empty($lesson['class_name'])): ?>
+                                <span class="class-tag">🏫 <?php echo htmlspecialchars($lesson['class_name']); ?></span>
+                            <?php else: ?>
+                                <span class="class-tag all-classes">📚 All Classes</span>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <div class="meta">
+                            <strong>📚 Subject:</strong> <?php echo htmlspecialchars($lesson['subject']); ?>
+                        </div>
+                        <div class="meta">
+                            <strong>📅 Date:</strong> <?php echo date('l, F d, Y', strtotime($lesson['lesson_date'])); ?>
+                        </div>
+                        
+                        <p><?php echo nl2br(htmlspecialchars($lesson['description'])); ?></p>
+                        
+                        <!-- Materials Section -->
+                        <div class="materials-section">
+                            <div class="materials-label">
+                                📎 Materials (<?php echo !empty($lesson['materials']) ? count($lesson['materials']) : 0; ?>)
+                            </div>
+                            <?php if (!empty($lesson['materials'])): ?>
+                                <?php foreach($lesson['materials'] as $material): ?>
+                                    <div class="material-item" onclick="viewDocument('<?php echo htmlspecialchars($material['id']); ?>', '<?php echo htmlspecialchars(addslashes($material['material_name'])); ?>', '<?php echo htmlspecialchars($material['material_path']); ?>', '<?php echo htmlspecialchars($material['file_size']); ?>')">
+                                        <span class="material-icon">📄</span>
+                                        <span class="material-name"><?php echo htmlspecialchars($material['material_name']); ?></span>
+                                        <?php if (!empty($material['file_size'])): ?>
+                                            <span class="material-size">(<?php echo htmlspecialchars($material['file_size']); ?>)</span>
+                                        <?php endif; ?>
+                                        <button class="view-btn">👁️ View</button>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <span class="no-materials">No materials uploaded for this lesson</span>
+                            <?php endif; ?>
+                        </div>
+                        
+                        <div class="timestamp">
+                            <?php if (isset($lesson['created_at'])): ?>
+                                Posted: <?php echo date('M d, Y h:i A', strtotime($lesson['created_at'])); ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div class="alert alert-warning">No lessons added yet.</div>
+                <a href="add_lesson.php" class="btn-premium btn-success" style="margin-top: 10px;">➕ Add Your First Lesson</a>
+            <?php endif; ?>
+        </div>
+    </div>
+    
+    <!-- Document View Modal -->
+    <div class="modal-overlay" id="documentModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">📄 Document Viewer</h3>
+                <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="file-info">
+                    <span class="file-icon-big" id="modalFileIcon">📄</span>
+                    <div class="file-details">
+                        <div class="file-name-big" id="modalFileName">document.pdf</div>
+                        <div class="file-meta" id="modalFileMeta">Size: 2.5 MB</div>
+                    </div>
+                </div>
+                <div class="file-preview-container" id="filePreviewContainer">
+                    <div class="file-placeholder" id="filePlaceholder">
+                        <span class="big-icon">📄</span>
+                        <p>No preview available for this file type</p>
+                        <p style="font-size: 13px; margin-top: 5px;">Click the download button below to view the file</p>
+                    </div>
+                    <iframe class="pdf-preview" id="pdfPreview" style="display: none;"></iframe>
+                    <img id="imagePreview" style="display: none; max-width: 100%; max-height: 400px; border-radius: 8px;" alt="Document preview">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-close-modal" onclick="closeModal()">Close</button>
+                <a href="#" class="btn-download" id="downloadBtn" download>
+                    ⬇️ Download Document
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Document viewing function
+        function viewDocument(materialId, fileName, filePath, fileSize) {
+            const modal = document.getElementById('documentModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalFileName = document.getElementById('modalFileName');
+            const modalFileMeta = document.getElementById('modalFileMeta');
+            const modalFileIcon = document.getElementById('modalFileIcon');
+            const filePlaceholder = document.getElementById('filePlaceholder');
+            const pdfPreview = document.getElementById('pdfPreview');
+            const imagePreview = document.getElementById('imagePreview');
+            const downloadBtn = document.getElementById('downloadBtn');
+            
+            // Reset previews
+            filePlaceholder.style.display = 'block';
+            pdfPreview.style.display = 'none';
+            imagePreview.style.display = 'none';
+            
+            // Set file info
+            modalTitle.textContent = '📄 ' + fileName;
+            modalFileName.textContent = fileName;
+            modalFileMeta.textContent = 'Size: ' + fileSize;
+            
+            // Set download link
+            downloadBtn.href = '../' + filePath;
+            
+            // Get file extension
+            const ext = fileName.split('.').pop().toLowerCase();
+            
+            // Set icon based on file type
+            const icons = {
+                'pdf': '📕',
+                'doc': '📘',
+                'docx': '📘',
+                'ppt': '📙',
+                'pptx': '📙',
+                'xls': '📗',
+                'xlsx': '📗',
+                'jpg': '🖼️',
+                'jpeg': '🖼️',
+                'png': '🖼️',
+                'gif': '🖼️',
+                'txt': '📄',
+                'default': '📄'
+            };
+            modalFileIcon.textContent = icons[ext] || icons['default'];
+            
+            // Try to preview the file
+            const fileUrl = '../' + filePath;
+            
+            // For images
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) {
+                filePlaceholder.style.display = 'none';
+                imagePreview.style.display = 'block';
+                imagePreview.src = fileUrl;
+                imagePreview.onerror = function() {
+                    imagePreview.style.display = 'none';
+                    filePlaceholder.style.display = 'block';
+                };
+            }
+            // For PDFs
+            else if (ext === 'pdf') {
+                filePlaceholder.style.display = 'none';
+                pdfPreview.style.display = 'block';
+                pdfPreview.src = fileUrl;
+                pdfPreview.onerror = function() {
+                    pdfPreview.style.display = 'none';
+                    filePlaceholder.style.display = 'block';
+                };
+            }
+            // For text files
+            else if (ext === 'txt') {
+                filePlaceholder.style.display = 'none';
+                // Fetch and display text content
+                fetch(fileUrl)
+                    .then(response => response.text())
+                    .then(text => {
+                        const textContainer = document.createElement('pre');
+                        textContainer.style.cssText = `
+                            width: 100%;
+                            max-height: 400px;
+                            overflow: auto;
+                            background: #f8fafc;
+                            padding: 20px;
+                            border-radius: 8px;
+                            font-family: monospace;
+                            font-size: 14px;
+                            color: #0f172a;
+                            white-space: pre-wrap;
+                            word-wrap: break-word;
+                        `;
+                        textContainer.textContent = text;
+                        const container = document.getElementById('filePreviewContainer');
+                        container.appendChild(textContainer);
+                        // Remove after closing
+                        window._textContainer = textContainer;
+                    })
+                    .catch(() => {
+                        filePlaceholder.style.display = 'block';
+                    });
+            }
+            // Word, PowerPoint, Excel files - show info
+            else if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].includes(ext)) {
+                filePlaceholder.style.display = 'block';
+                const placeholderText = document.querySelector('#filePlaceholder p');
+                const iconSpan = document.querySelector('#filePlaceholder .big-icon');
+                iconSpan.textContent = '📄';
+                placeholderText.textContent = 'This is a ' + ext.toUpperCase() + ' file. Click the download button below to open it.';
+            }
+            
+            // Show modal
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeModal() {
+            const modal = document.getElementById('documentModal');
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            
+            // Clean up any text container
+            if (window._textContainer && window._textContainer.parentNode) {
+                window._textContainer.parentNode.removeChild(window._textContainer);
+                window._textContainer = null;
+            }
+            
+            // Reset previews
+            document.getElementById('pdfPreview').src = '';
+            document.getElementById('imagePreview').src = '';
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('documentModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+    
+    <?php include '../../includes/footer.php'; ?>
+</body>
+</html>
